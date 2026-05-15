@@ -1,0 +1,314 @@
+services:
+  redis-dev:
+    image: redis:7-alpine
+    container_name: arc-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis/dev:/data
+    networks:
+      - arc-network-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  auth-dev:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+      target: builder
+    container_name: arc-auth-dev
+    ports:
+      - "8081:8080"
+    environment:
+      - SERVICE_NAME=auth
+      - ENV=development
+      - LOG_LEVEL=debug
+      - REDIS_ADDR=redis-dev:6379
+      - ARC_SIGNING_KEY=a3f7b2c91d4e8f0a6b5c3d2e1f9a8b7c4d6e5f0a1b2c3d4e5f6a7b8c9d0e1f2
+    volumes:
+      - ./data/dev:/root/data
+      - ./services/auth:/app/services/auth
+      - ./shared:/app/shared
+    networks:
+      - arc-network-dev
+    restart: unless-stopped
+    command: ["go", "run", "./services/auth"]
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+
+  account-dev:
+    build:
+      context: .
+      dockerfile: services/account/Dockerfile
+      target: builder
+    container_name: arc-account-dev
+    ports:
+      - "2525:2525"
+    environment:
+      - SERVICE_NAME=account
+      - ENV=development
+      - LOG_LEVEL=debug
+      - REDIS_ADDR=redis-dev:6379
+      - ARC_SIGNING_KEY=a3f7b2c91d4e8f0a6b5c3d2e1f9a8b7c4d6e5f0a1b2c3d4e5f6a7b8c9d0e1f2
+    volumes:
+      - ./data/dev:/root/data
+      - ./services/account:/app/services/account
+      - ./shared:/app/shared
+    networks:
+      - arc-network-dev
+    restart: unless-stopped
+    command: ["go", "run", "./services/account"]
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+
+  anticheat-dev:
+    build:
+      context: .
+      dockerfile: services/anticheat/Dockerfile
+      target: builder
+    container_name: arc-anticheat-dev
+    ports:
+      - "2151:2151"
+    environment:
+      - SERVICE_NAME=anticheat
+      - ENV=development
+      - LOG_LEVEL=debug
+      - REDIS_ADDR=redis-dev:6379
+      - ARC_SIGNING_KEY=a3f7b2c91d4e8f0a6b5c3d2e1f9a8b7c4d6e5f0a1b2c3d4e5f6a7b8c9d0e1f2
+    volumes:
+      - ./data/dev:/root/data
+      - ./services/anticheat:/app/services/anticheat
+      - ./shared:/app/shared
+    networks:
+      - arc-network-dev
+    restart: unless-stopped
+    command: ["go", "run", "./services/anticheat"]
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+
+  internal-dev:
+    build:
+      context: .
+      dockerfile: services/internal/Dockerfile
+      target: builder
+    container_name: arc-internal-dev
+    ports:
+      - "6070:6070"
+    environment:
+      - SERVICE_NAME=internal
+      - ENV=development
+      - LOG_LEVEL=debug
+      - REDIS_ADDR=redis-dev:6379
+      - ARC_SIGNING_KEY=a3f7b2c91d4e8f0a6b5c3d2e1f9a8b7c4d6e5f0a1b2c3d4e5f6a7b8c9d0e1f2
+      - ARC_ADMIN_KEY=b8d4e2f6a1c3b5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3
+    volumes:
+      - ./data/dev:/root/data
+      - ./services/internal:/app/services/internal
+      - ./shared:/app/shared
+    networks:
+      - arc-network-dev
+    restart: unless-stopped
+    command: ["go", "run", "./services/internal"]
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+
+  redis-prod:
+    image: redis:7-alpine
+    container_name: arc-redis-prod
+    ports:
+      - "6381:6379"
+    volumes:
+      - ./data/redis/production:/data
+    networks:
+      - arc-network-prod
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  auth-prod:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    image: arc/auth:latest
+    container_name: arc-auth-prod
+    ports:
+      - "8083:8080"
+    environment:
+      - SERVICE_NAME=auth
+      - ENV=production
+      - LOG_LEVEL=warn
+      - REDIS_ADDR=redis-prod:6379
+      - ARC_SIGNING_KEY=c7e9f1a3b5d7c9e1f3a5b7d9e1f3a5c7b9d1e3f5a7b9c1d3e5f7a9b1c3d5e7f9
+    volumes:
+      - ./data/production:/root/data
+    networks:
+      - arc-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      redis-prod:
+        condition: service_healthy
+
+  account-prod:
+    build:
+      context: .
+      dockerfile: services/account/Dockerfile
+    image: arc/account:latest
+    container_name: arc-account-prod
+    ports:
+      - "2527:2525"
+    environment:
+      - SERVICE_NAME=account
+      - ENV=production
+      - LOG_LEVEL=warn
+      - REDIS_ADDR=redis-prod:6379
+      - ARC_SIGNING_KEY=c7e9f1a3b5d7c9e1f3a5b7d9e1f3a5c7b9d1e3f5a7b9c1d3e5f7a9b1c3d5e7f9
+    volumes:
+      - ./data/production:/root/data
+    networks:
+      - arc-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2525/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      redis-prod:
+        condition: service_healthy
+
+  anticheat-prod:
+    build:
+      context: .
+      dockerfile: services/anticheat/Dockerfile
+    image: arc/anticheat:latest
+    container_name: arc-anticheat-prod
+    ports:
+      - "2153:2151"
+    environment:
+      - SERVICE_NAME=anticheat
+      - ENV=production
+      - LOG_LEVEL=warn
+      - REDIS_ADDR=redis-prod:6379
+      - ARC_SIGNING_KEY=c7e9f1a3b5d7c9e1f3a5b7d9e1f3a5c7b9d1e3f5a7b9c1d3e5f7a9b1c3d5e7f9
+    volumes:
+      - ./data/production:/root/data
+    networks:
+      - arc-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2151/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      redis-prod:
+        condition: service_healthy
+
+  internal-prod:
+    build:
+      context: .
+      dockerfile: services/internal/Dockerfile
+    image: arc/internal:latest
+    container_name: arc-internal-prod
+    ports:
+      - "6072:6070"
+    environment:
+      - SERVICE_NAME=internal
+      - ENV=production
+      - LOG_LEVEL=warn
+      - REDIS_ADDR=redis-prod:6379
+      - ARC_SIGNING_KEY=c7e9f1a3b5d7c9e1f3a5b7d9e1f3a5c7b9d1e3f5a7b9c1d3e5f7a9b1c3d5e7f9
+      - ARC_ADMIN_KEY=d9e1f3a5b7c9d1e3f5a7b9c1d3e5f7a9b1c3d5e7f9a1b3c5d7e9f1a3b5c7d9e1
+    volumes:
+      - ./data/production:/root/data
+    networks:
+      - arc-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:6070/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      redis-prod:
+        condition: service_healthy
+
+networks:
+  arc-network-dev:
+    driver: bridge
+    name: arc-network-dev
+  arc-network-prod:
+    driver: bridge
+    name: arc-network-prod

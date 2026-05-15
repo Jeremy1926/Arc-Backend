@@ -1,0 +1,5 @@
+data/*
+KEYS
+.env
+.env.*
+!.env.example

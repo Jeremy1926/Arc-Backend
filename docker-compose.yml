@@ -1,0 +1,122 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: arc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - arc-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    container_name: arc-auth
+    ports:
+      - "8081:8080"
+    environment:
+      - SERVICE_NAME=auth
+      - REDIS_ADDR=redis:6379
+      - ARC_SIGNING_KEY=9e11fca304feed49ded73efb3b809662037f7f2b681dfe9f558873d1729dc144
+    volumes:
+      - ./data:/root/data
+    networks:
+      - arc-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  account:
+    build:
+      context: .
+      dockerfile: services/account/Dockerfile
+    container_name: arc-account
+    ports:
+      - "2525:2525"
+    environment:
+      - SERVICE_NAME=account
+      - REDIS_ADDR=redis:6379
+      - ARC_SIGNING_KEY=9e11fca304feed49ded73efb3b809662037f7f2b681dfe9f558873d1729dc144
+    volumes:
+      - ./data:/root/data
+    networks:
+      - arc-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  management:
+    build:
+      context: .
+      dockerfile: services/management/Dockerfile
+    container_name: arc-management
+    ports:
+      - "6842:6842"
+    environment:
+      - SERVICE_NAME=management
+      - REDIS_ADDR=redis:6379
+      - ARC_SIGNING_KEY=9e11fca304feed49ded73efb3b809662037f7f2b681dfe9f558873d1729dc144
+    volumes:
+      - ./data:/root/data
+    networks:
+      - arc-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  anticheat:
+    build:
+      context: .
+      dockerfile: services/anticheat/Dockerfile
+    container_name: arc-anticheat
+    ports:
+      - "2151:2151"
+    environment:
+      - SERVICE_NAME=anticheat
+      - REDIS_ADDR=redis:6379
+      - ARC_SIGNING_KEY=9e11fca304feed49ded73efb3b809662037f7f2b681dfe9f558873d1729dc144
+    volumes:
+      - ./data:/root/data
+    networks:
+      - arc-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  internal:
+    build:
+      context: .
+      dockerfile: services/internal/Dockerfile
+    container_name: arc-internal
+    ports:
+      - "6070:6070"
+    environment:
+      - SERVICE_NAME=internal
+      - REDIS_ADDR=redis:6379
+      - ARC_SIGNING_KEY=9e11fca304feed49ded73efb3b809662037f7f2b681dfe9f558873d1729dc144
+      - ARC_ADMIN_KEY=b8d4e2f3a1c3b5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3
+    volumes:
+      - ./data:/root/data
+    networks:
+      - arc-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+networks:
+  arc-network:
+    driver: bridge
